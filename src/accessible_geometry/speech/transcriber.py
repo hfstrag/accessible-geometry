@@ -1,11 +1,15 @@
 """Speech-to-text transcription of the student's recorded voice."""
 
+import logging
+import time
 from typing import Protocol
 
 import groq
 
 from accessible_geometry.errors import ProviderError
 from accessible_geometry.i18n import Language
+
+logger = logging.getLogger(__name__)
 
 # Whisper uses the prompt as preceding context: listing geometry words and point
 # names makes it spell them the way we expect ("segment AB" rather than "segment habit").
@@ -33,6 +37,7 @@ class GroqTranscriber:
         self._model = model
 
     async def transcribe(self, audio: bytes, filename: str, language: Language) -> str:
+        started = time.perf_counter()
         try:
             result = await self._client.audio.transcriptions.create(
                 file=(filename, audio),
@@ -44,4 +49,10 @@ class GroqTranscriber:
             )
         except groq.APIError as exc:
             raise ProviderError("speech-to-text request failed") from exc
+        logger.info(
+            "STT %s transcribed %d KB in %.0f ms",
+            self._model,
+            len(audio) // 1024,
+            (time.perf_counter() - started) * 1000,
+        )
         return result.text.strip()

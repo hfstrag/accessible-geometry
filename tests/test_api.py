@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from accessible_geometry.api.routes import get_service
 from accessible_geometry.config import Settings
+from accessible_geometry.conversation import MAX_EXCHANGES, Exchange
 from accessible_geometry.geometry.actions import CreatePoint, CreateSegment
 from accessible_geometry.main import create_app
 from accessible_geometry.service import VoiceCommandService
@@ -119,3 +120,21 @@ def test_planning_failure_is_reported(client: TestClient, interpreter: FakeInter
     assert body["status"] == "rejected"
     assert body["steps"] == []
     assert body["message"] == "Je ne trouve pas A dans la figure."
+
+
+def test_history_is_passed_to_interpreter(client: TestClient, interpreter: FakeInterpreter) -> None:
+    history = [{"user": "place A", "assistant": "Point A placé."}]
+    client.post(
+        "/api/voice",
+        files={"audio": ("a.webm", b"x", "audio/webm")},
+        data={"language": "fr", "history": json.dumps(history)},
+    )
+    client.post("/api/command", json={"text": "B", "language": "fr", "history": history})
+
+    assert [h for _, h in interpreter.calls] == [[Exchange(**history[0])]] * 2
+
+
+def test_history_length_is_limited(client: TestClient) -> None:
+    history = [{"user": "a", "assistant": "b"}] * (MAX_EXCHANGES + 1)
+    response = client.post("/api/command", json={"text": "B", "language": "fr", "history": history})
+    assert response.status_code == 422

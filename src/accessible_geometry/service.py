@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from accessible_geometry.conversation import History
 from accessible_geometry.errors import InterpretationError, PlanningError
 from accessible_geometry.geometry.planner import Step, plan_actions
 from accessible_geometry.geometry.state import ConstructionState
@@ -32,14 +33,19 @@ class VoiceCommandService:
         self._interpreter = interpreter
 
     async def handle_audio(
-        self, audio: bytes, filename: str, state: ConstructionState, language: Language
+        self,
+        audio: bytes,
+        filename: str,
+        state: ConstructionState,
+        language: Language,
+        history: History,
     ) -> CommandResult:
         transcript = await self._transcriber.transcribe(audio, filename, language)
         logger.info("Transcript (%s): %r", language, transcript)
-        return await self.handle_text(transcript, state, language)
+        return await self.handle_text(transcript, state, language, history)
 
     async def handle_text(
-        self, text: str, state: ConstructionState, language: Language
+        self, text: str, state: ConstructionState, language: Language, history: History
     ) -> CommandResult:
         text = text.strip()
         if not text:
@@ -48,7 +54,7 @@ class VoiceCommandService:
             )
 
         try:
-            actions = await self._interpreter.interpret(text, state, language)
+            actions = await self._interpreter.interpret(text, state, language, history)
         except InterpretationError:
             logger.warning("Could not interpret %r", text, exc_info=True)
             return CommandResult(
@@ -58,7 +64,11 @@ class VoiceCommandService:
         try:
             plan = plan_actions(actions, state, language)
         except PlanningError as exc:
+            logger.info("Rejected by planner: %s", exc.message)
             return CommandResult(status="rejected", transcript=text, message=exc.message)
+
+        for step in plan.steps:
+            logger.debug("GeoGebra step: %s", step.model_dump_json())
 
         return CommandResult(
             status=plan.status, transcript=text, message=plan.message, steps=plan.steps

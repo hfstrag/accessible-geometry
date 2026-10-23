@@ -3,9 +3,10 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
 from accessible_geometry.config import Settings
+from accessible_geometry.conversation import MAX_EXCHANGES, Exchange
 from accessible_geometry.geometry.state import ConstructionState
 from accessible_geometry.i18n import Language
 from accessible_geometry.service import CommandResult, VoiceCommandService
@@ -41,6 +42,10 @@ class TextCommandRequest(BaseModel):
     text: str = Field(max_length=1000)
     language: Language
     state: ConstructionState = Field(default_factory=ConstructionState)
+    history: list[Exchange] = Field(default_factory=list, max_length=MAX_EXCHANGES)
+
+
+_HistoryAdapter = TypeAdapter(Annotated[list[Exchange], Field(max_length=MAX_EXCHANGES)])
 
 
 @router.get("/health")
@@ -53,7 +58,7 @@ async def health(request: Request) -> HealthResponse:
 @router.post("/command")
 async def text_command(payload: TextCommandRequest, service: ServiceDep) -> CommandResult:
     """Run a typed command. Skips speech-to-text; also useful for testing."""
-    return await service.handle_text(payload.text, payload.state, payload.language)
+    return await service.handle_text(payload.text, payload.state, payload.language, payload.history)
 
 
 @router.post("/voice")
@@ -63,10 +68,12 @@ async def voice_command(
     audio: Annotated[UploadFile, File(description="Recorded speech (webm, ogg, wav...).")],
     language: Annotated[Language, Form()],
     state: Annotated[str, Form(description="ConstructionState as JSON.")] = "{}",
+    history: Annotated[str, Form(description="Recent exchanges as a JSON list.")] = "[]",
 ) -> CommandResult:
     """Run a spoken command recorded by the browser."""
     try:
         construction = ConstructionState.model_validate_json(state)
+        exchanges = _HistoryAdapter.validate_json(history)
     except ValidationError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=exc.errors()
@@ -77,4 +84,6 @@ async def voice_command(
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="Recording is too long."
         )
-    return await service.handle_audio(data, audio.filename or "speech.webm", construction, language)
+    return await service.handle_audio(
+        data, audio.filename or "speech.webm", construction, language, exchanges
+    )

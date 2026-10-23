@@ -74,6 +74,13 @@ uv run ruff format .       # format
 uv run mypy                # type check (strict)
 ```
 
+### Seeing what happens
+
+Every request logs one line per stage in the server terminal: speech-to-text time, the
+transcript, LLM latency and **token usage**, and the actions chosen. Set `LOG_LEVEL=debug`
+in `.env` to also log the full system prompt sent to the LLM, its reasoning (for reasoning
+models), the raw tool calls and the GeoGebra commands sent to the browser.
+
 The tests replace Groq with fakes ([`tests/fakes.py`](tests/fakes.py)), so they run
 offline. CI runs all of the above on every push ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 

@@ -1,5 +1,6 @@
 """Test doubles for the AI providers, so tests never need a Groq API key."""
 
+from accessible_geometry.conversation import History
 from accessible_geometry.errors import InterpretationError
 from accessible_geometry.geometry.actions import GeometryAction
 from accessible_geometry.geometry.state import ConstructionState
@@ -21,12 +22,12 @@ class FakeInterpreter:
 
     def __init__(self, actions: list[GeometryAction] | None) -> None:
         self.actions = actions
-        self.calls: list[str] = []
+        self.calls: list[tuple[str, History]] = []
 
     async def interpret(
-        self, text: str, state: ConstructionState, language: Language
+        self, text: str, state: ConstructionState, language: Language, history: History
     ) -> list[GeometryAction]:
-        self.calls.append(text)
+        self.calls.append((text, history))
         if self.actions is None:
             raise InterpretationError("fake failure")
         return self.actions

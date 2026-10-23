@@ -19,21 +19,22 @@ export async function getHealth() {
   return parse(await fetch("/api/health"));
 }
 
-export async function sendVoiceCommand(audioBlob, language, state) {
+export async function sendVoiceCommand(audioBlob, language, state, history) {
   const form = new FormData();
   const extension = audioBlob.type.includes("ogg") ? "ogg" : "webm";
   form.append("audio", audioBlob, `speech.${extension}`);
   form.append("language", language);
   form.append("state", JSON.stringify(state));
+  form.append("history", JSON.stringify(history));
   return parse(await fetch("/api/voice", { method: "POST", body: form }));
 }
 
-export async function sendTextCommand(text, language, state) {
+export async function sendTextCommand(text, language, state, history) {
   return parse(
     await fetch("/api/command", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, language, state }),
+      body: JSON.stringify({ text, language, state, history }),
     }),
   );
 }

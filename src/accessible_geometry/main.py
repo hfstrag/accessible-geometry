@@ -26,6 +26,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
+    _configure_logging(settings.log_level)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -64,10 +65,18 @@ async def _provider_error_handler(request: Request, exc: Exception) -> JSONRespo
     )
 
 
+def _configure_logging(level: str) -> None:
+    """Log our own modules at `level` (e.g. debug), third-party libraries at INFO.
+
+    Done in `create_app` rather than `run` so it also applies under `uvicorn --reload`.
+    """
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
+    logging.getLogger("accessible_geometry").setLevel(level.upper())
+
+
 def run() -> None:
     """Start the server (the `accessible-geometry` command)."""
     settings = get_settings()
-    logging.basicConfig(
-        level=settings.log_level.upper(), format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-    )
     uvicorn.run(create_app(settings), host=settings.host, port=settings.port)

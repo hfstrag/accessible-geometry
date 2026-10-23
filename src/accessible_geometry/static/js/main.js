@@ -7,6 +7,7 @@ import { Recorder } from "./recorder.js";
 import { speak, stopSpeaking } from "./speech.js";
 
 const LANGUAGE_STORAGE_KEY = "accessible-geometry.language";
+const MAX_EXCHANGES = 8; // Must not exceed MAX_EXCHANGES in conversation.py.
 
 const elements = {
   language: document.getElementById("language"),
@@ -24,6 +25,8 @@ const recorder = new Recorder();
 let board = null;
 let language = loadLanguage();
 let busy = false;
+// Recent {user, assistant} exchanges, sent with each command as the LLM's short-term memory.
+const conversation = [];
 
 function loadLanguage() {
   try {
@@ -70,6 +73,11 @@ function report(message, isError = false) {
   speak(message, language);
 }
 
+function remember(user, assistant) {
+  conversation.push({ user, assistant });
+  conversation.splice(0, conversation.length - MAX_EXCHANGES);
+}
+
 async function startRecording() {
   if (busy || !board || recorder.isRecording) return;
   stopSpeaking();
@@ -90,7 +98,7 @@ async function stopRecordingAndSend() {
     setStatus("ready");
     return;
   }
-  await runCommand(() => sendVoiceCommand(audio, language, board.readState()));
+  await runCommand(() => sendVoiceCommand(audio, language, board.readState(), conversation));
 }
 
 async function runCommand(send) {
@@ -101,12 +109,10 @@ async function runCommand(send) {
     const result = await send();
     if (result.transcript) addHistory(`${t(language, "youSaid")} : ${result.transcript}`, "said");
     const outcome = result.steps.length ? board.execute(result.steps) : { ok: true };
-    if (!outcome.ok) {
-      console.warn("GeoGebra rejected command:", outcome.failedCommand);
-      report(t(language, "executionFailed"), true);
-    } else {
-      report(result.message, result.status === "rejected");
-    }
+    const reply = outcome.ok ? result.message : t(language, "executionFailed");
+    if (!outcome.ok) console.warn("GeoGebra rejected command:", outcome.failedCommand);
+    report(reply, !outcome.ok || result.status === "rejected");
+    if (result.transcript) remember(result.transcript, reply);
   } catch (error) {
     console.error(error);
     report(error instanceof ApiError ? error.message : t(language, "serverError"), true);
@@ -156,7 +162,7 @@ function bindEvents() {
     const text = elements.textInput.value.trim();
     if (!text || busy || !board) return;
     elements.textInput.value = "";
-    runCommand(() => sendTextCommand(text, language, board.readState()));
+    runCommand(() => sendTextCommand(text, language, board.readState(), conversation));
   });
 }
 
