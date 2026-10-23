@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Géométrie à la voix</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+    <script type="module" src="/js/main.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <h1 data-i18n="title">Géométrie à la voix</h1>
+      <label class="language">
+        <span data-i18n="languageLabel">Langue</span>
+        <select id="language">
+          <option value="fr">Français</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+    </header>
+
+    <div id="config-warning" class="banner" role="alert" hidden data-i18n="notConfigured"></div>
+
+    <main class="layout">
+      <section class="board" aria-labelledby="board-title">
+        <h2 id="board-title" class="visually-hidden" data-i18n="boardTitle">Figure</h2>
+        <div id="ggb-container" class="ggb-container"></div>
+      </section>
+
+      <aside class="panel">
+        <button id="talk-button" class="talk-button" type="button" aria-pressed="false">
+          <span class="talk-icon" aria-hidden="true">🎤</span>
+          <span id="talk-label" data-i18n="talkIdle">Appuyer pour parler</span>
+        </button>
+        <p class="hint" data-i18n="talkHint">Ou maintenir la touche Espace pendant que vous parlez.</p>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+
+        <form id="text-form" class="text-form">
+          <label for="text-input" data-i18n="textLabel">Ou écrire une commande</label>
+          <div class="text-row">
+            <input id="text-input" type="text" autocomplete="off" />
+            <button type="submit" data-i18n="send">Envoyer</button>
+          </div>
+        </form>
+
+        <h2 data-i18n="historyTitle">Historique</h2>
+        <ol id="history" class="history" aria-live="polite"></ol>
+      </aside>
+    </main>
+  </body>
+</html>
