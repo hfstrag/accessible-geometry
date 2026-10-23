@@ -1,11 +1,14 @@
 """Geometry actions the LLM is allowed to request.
 
-Each action is a Pydantic model exposed to the LLM as a tool: the class docstring
-becomes the tool description and the fields become its parameters. Every tool
-call is parsed back into one of these models, so nothing unvalidated ever
-reaches GeoGebra.
+Each action is a Pydantic model. The LLM gets a single tool, `apply_actions`,
+whose argument is the ordered list of actions for the whole request: one LLM
+call per command. In that list, each action is an object whose `action` key is
+the model's `action_name`, whose description is the class docstring, and whose
+other keys are the model's fields. Every item is parsed back into one of these
+models, so nothing unvalidated ever reaches GeoGebra.
 """
 
+import json
 from typing import Annotated, Any, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -28,11 +31,11 @@ StepCount = Annotated[int, Field(ge=1, le=20, description="How many actions to u
 
 
 class GeometryAction(BaseModel):
-    """Base class of all actions. Subclasses set `tool_name` and a docstring."""
+    """Base class of all actions. Subclasses set `action_name` and a docstring."""
 
     model_config = ConfigDict(extra="ignore")
 
-    tool_name: ClassVar[str]
+    action_name: ClassVar[str]
 
 
 def _require_distinct(first: str, second: str) -> None:
@@ -43,7 +46,7 @@ def _require_distinct(first: str, second: str) -> None:
 class CreatePoint(GeometryAction):
     """Place a new point. Give x and y only if the student said the coordinates."""
 
-    tool_name: ClassVar[str] = "create_point"
+    action_name: ClassVar[str] = "create_point"
 
     name: PointName | None = Field(
         default=None, description="Point name. Omit it to use the next free letter."
@@ -61,7 +64,7 @@ class CreatePoint(GeometryAction):
 class CreateSegment(GeometryAction):
     """Draw the segment [AB] between two existing points."""
 
-    tool_name: ClassVar[str] = "create_segment"
+    action_name: ClassVar[str] = "create_segment"
 
     start: PointName
     end: PointName
@@ -75,7 +78,7 @@ class CreateSegment(GeometryAction):
 class CreateLine(GeometryAction):
     """Draw the line (AB), infinite in both directions, through two existing points."""
 
-    tool_name: ClassVar[str] = "create_line"
+    action_name: ClassVar[str] = "create_line"
 
     point1: PointName
     point2: PointName
@@ -90,7 +93,7 @@ class CreateLine(GeometryAction):
 class CreateRay(GeometryAction):
     """Draw the ray [AB) (demi-droite) starting at `origin` and passing through `through`."""
 
-    tool_name: ClassVar[str] = "create_ray"
+    action_name: ClassVar[str] = "create_ray"
 
     origin: PointName
     through: PointName
@@ -108,7 +111,7 @@ class CreateCircle(GeometryAction):
     Give exactly one of `radius` and `through`.
     """
 
-    tool_name: ClassVar[str] = "create_circle"
+    action_name: ClassVar[str] = "create_circle"
 
     center: PointName
     radius: Length | None = Field(default=None, description="Radius length.")
@@ -127,7 +130,7 @@ class CreateCircle(GeometryAction):
 class DeleteObject(GeometryAction):
     """Delete an object. Objects that depend on it are deleted too."""
 
-    tool_name: ClassVar[str] = "delete_object"
+    action_name: ClassVar[str] = "delete_object"
 
     name: ObjectName
 
@@ -135,7 +138,7 @@ class DeleteObject(GeometryAction):
 class Undo(GeometryAction):
     """Undo the last action(s) ("annule", "retour en arrière")."""
 
-    tool_name: ClassVar[str] = "undo"
+    action_name: ClassVar[str] = "undo"
 
     steps: StepCount = 1
 
@@ -143,7 +146,7 @@ class Undo(GeometryAction):
 class Redo(GeometryAction):
     """Redo the last undone action(s) ("rétablis")."""
 
-    tool_name: ClassVar[str] = "redo"
+    action_name: ClassVar[str] = "redo"
 
     steps: StepCount = 1
 
@@ -151,7 +154,7 @@ class Redo(GeometryAction):
 class AskClarification(GeometryAction):
     """Ask the student one short question when the request is ambiguous or impossible."""
 
-    tool_name: ClassVar[str] = "ask_clarification"
+    action_name: ClassVar[str] = "ask_clarification"
 
     question: str = Field(min_length=1, max_length=300)
 
@@ -167,45 +170,102 @@ ACTION_TYPES: tuple[type[GeometryAction], ...] = (
     Redo,
     AskClarification,
 )
-ACTIONS_BY_TOOL: dict[str, type[GeometryAction]] = {a.tool_name: a for a in ACTION_TYPES}
+ACTIONS_BY_NAME: dict[str, type[GeometryAction]] = {a.action_name: a for a in ACTION_TYPES}
 
 
-def parse_tool_call(tool_name: str, arguments: str) -> GeometryAction:
-    """Turn one LLM tool call (name + JSON arguments) into a validated action."""
-    action_type = ACTIONS_BY_TOOL.get(tool_name)
-    if action_type is None:
-        raise InterpretationError(f"unknown tool {tool_name!r}")
+TOOL_NAME = "apply_actions"
+MAX_ACTIONS = 20
+
+
+def parse_tool_call(tool_name: str, arguments: str) -> list[GeometryAction]:
+    """Turn one `apply_actions` call (JSON arguments) into validated actions.
+
+    Errors name the faulty items so that the LLM can correct them.
+    """
+    if tool_name != TOOL_NAME:
+        raise InterpretationError(f"unknown tool {tool_name!r}, the only tool is {TOOL_NAME}")
     try:
-        return action_type.model_validate_json(arguments or "{}")
+        payload = json.loads(arguments or "{}")
+    except json.JSONDecodeError as exc:
+        raise InterpretationError(f"arguments are not valid JSON: {exc}") from exc
+    items = payload.get("actions") if isinstance(payload, dict) else None
+    if not isinstance(items, list) or not items:
+        raise InterpretationError("'actions' must be a non-empty list")
+    if len(items) > MAX_ACTIONS:
+        raise InterpretationError(f"at most {MAX_ACTIONS} actions per request")
+
+    actions: list[GeometryAction] = []
+    errors: list[str] = []
+    for index, item in enumerate(items, start=1):
+        try:
+            actions.append(_parse_item(item))
+        except InterpretationError as exc:
+            errors.append(f"action {index}: {exc}")
+    if errors:
+        raise InterpretationError("; ".join(errors))
+    return actions
+
+
+def _parse_item(item: Any) -> GeometryAction:
+    if not isinstance(item, dict):
+        raise InterpretationError("must be an object")
+    name = item.get("action")
+    action_type = ACTIONS_BY_NAME.get(name) if isinstance(name, str) else None
+    if action_type is None:
+        raise InterpretationError(f"unknown action {name!r}")
+    try:
+        return action_type.model_validate({k: v for k, v in item.items() if k != "action"})
     except ValidationError as exc:
-        raise InterpretationError(f"invalid arguments for {tool_name}: {exc}") from exc
+        details = ", ".join(
+            f"{'.'.join(map(str, error['loc'])) or 'arguments'}: {error['msg']}"
+            for error in exc.errors()
+        )
+        raise InterpretationError(f"invalid {name} ({details})") from exc
 
 
 def tool_definitions() -> list[dict[str, Any]]:
-    """JSON tool definitions in the OpenAI / Groq function-calling format."""
+    """The `apply_actions` tool, in the OpenAI / Groq function-calling format."""
     return [
         {
             "type": "function",
             "function": {
-                "name": action.tool_name,
-                "description": " ".join((action.__doc__ or "").split()),
-                "parameters": _simplify_schema(action.model_json_schema()),
+                "name": TOOL_NAME,
+                "description": (
+                    "Apply the student's whole request to the figure: "
+                    "the list of actions, in order."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "actions": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": MAX_ACTIONS,
+                            "items": {"anyOf": [_action_schema(a) for a in ACTION_TYPES]},
+                        }
+                    },
+                    "required": ["actions"],
+                },
             },
         }
-        for action in ACTION_TYPES
     ]
 
 
-def _simplify_schema(schema: dict[str, Any]) -> dict[str, Any]:
-    """Make a Pydantic JSON schema easier for an LLM to follow.
+def _action_schema(action: type[GeometryAction]) -> dict[str, Any]:
+    """Schema of one item of the `actions` list, tagged by its `action` key.
 
-    Drops titles and the top-level description (it is already the tool
-    description), and turns `anyOf: [X, null]` into plain `X`: optional
-    parameters are simply left out of `required`.
+    Simplified for the LLM, to save prompt tokens: `anyOf: [X, null]` becomes
+    plain `X` (optional parameters are simply left out of `required`), and
+    titles, defaults and constraints are dropped. Constraints are still
+    enforced by Pydantic when parsing, and violations are sent back to the LLM.
     """
-    cleaned: dict[str, Any] = _strip(schema)
-    cleaned.pop("description", None)
-    return cleaned
+    schema: dict[str, Any] = _strip(action.model_json_schema())
+    return {
+        "type": "object",
+        "description": " ".join((action.__doc__ or "").split()),
+        "properties": {"action": {"const": action.action_name}, **schema.get("properties", {})},
+        "required": ["action", *schema.get("required", [])],
+    }
 
 
 def _strip(node: Any) -> Any:
@@ -217,9 +277,20 @@ def _strip(node: Any) -> Any:
     if isinstance(variants, list) and {"type": "null"} in variants and len(variants) == 2:
         (inner,) = (v for v in variants if v != {"type": "null"})
         node = {**{k: v for k, v in node.items() if k != "anyOf"}, **inner}
-    # A string-valued "title" is schema metadata; a dict-valued one would be a field named title.
+    # Keywords hold scalars; a dict value under the same key would be a field with that name.
     return {
         key: _strip(value)
         for key, value in node.items()
-        if not (key == "title" and isinstance(value, str))
+        if not (key in _OMITTED_KEYWORDS and not isinstance(value, dict))
     }
+
+
+_OMITTED_KEYWORDS = {
+    "title",
+    "default",
+    "pattern",
+    "minimum",
+    "maximum",
+    "exclusiveMinimum",
+    "exclusiveMaximum",
+}

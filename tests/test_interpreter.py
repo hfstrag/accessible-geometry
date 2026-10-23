@@ -1,5 +1,6 @@
 """GroqInterpreter tests with a fake Groq client (no network, no API key)."""
 
+import json
 from itertools import count
 from types import SimpleNamespace
 from typing import Any
@@ -9,41 +10,42 @@ import pytest
 from accessible_geometry.conversation import Exchange
 from accessible_geometry.errors import InterpretationError
 from accessible_geometry.geometry.actions import (
-    AskClarification,
+    TOOL_NAME,
     CreateCircle,
     CreatePoint,
     CreateSegment,
 )
 from accessible_geometry.geometry.state import ConstructionState
-from accessible_geometry.llm.interpreter import MAX_ROUNDS, GroqInterpreter
+from accessible_geometry.llm.interpreter import MAX_ATTEMPTS, GroqInterpreter
 from accessible_geometry.llm.prompts import build_system_prompt
 
 _ids = count()
 
 
-def tool_call(name: str, arguments: str) -> SimpleNamespace:
+def apply_actions(*actions: dict[str, Any], tool: str = TOOL_NAME) -> SimpleNamespace:
+    """A fake `apply_actions` tool call."""
+    arguments = json.dumps({"actions": list(actions)})
     return SimpleNamespace(
-        id=f"call_{next(_ids)}", function=SimpleNamespace(name=name, arguments=arguments)
+        id=f"call_{next(_ids)}", function=SimpleNamespace(name=tool, arguments=arguments)
     )
 
 
 class FakeGroqClient:
-    """Answers each chat completion with the next scripted round of tool calls.
+    """Answers each chat completion with the next scripted list of tool calls.
 
-    A round of `None` is a plain text answer (the model is done). After the
-    script runs out, the model keeps answering with text.
+    A response of `None` is a plain text answer without any tool call.
     """
 
-    def __init__(self, *rounds: list[SimpleNamespace] | None) -> None:
-        self.rounds = list(rounds)
+    def __init__(self, *responses: list[SimpleNamespace] | None) -> None:
+        self.responses = list(responses)
         self.requests: list[dict[str, Any]] = []
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
     async def _create(self, **kwargs: Any) -> SimpleNamespace:
         # Snapshot the messages: the interpreter keeps appending to the same list.
         self.requests.append({**kwargs, "messages": list(kwargs["messages"])})
-        tool_calls = self.rounds.pop(0) if self.rounds else None
-        message = SimpleNamespace(tool_calls=tool_calls, content=None if tool_calls else "Done.")
+        tool_calls = self.responses.pop(0)
+        message = SimpleNamespace(tool_calls=tool_calls, content=None if tool_calls else "Hello")
         return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
 
 
@@ -51,74 +53,69 @@ def make_interpreter(client: FakeGroqClient) -> GroqInterpreter:
     return GroqInterpreter(client, model="test-model")  # type: ignore[arg-type]
 
 
-async def test_collects_tool_calls_across_rounds() -> None:
-    # The model emits one call per response, as gpt-oss does on Groq.
+async def test_whole_request_in_one_llm_call(triangle_points: ConstructionState) -> None:
     client = FakeGroqClient(
-        [tool_call("create_point", '{"name": "O"}')],
-        [tool_call("create_circle", '{"center": "O", "radius": 3}')],
-        None,
+        [
+            apply_actions(
+                {"action": "create_point", "name": "O"},
+                {"action": "create_circle", "center": "O", "radius": 3},
+            )
+        ]
     )
     actions = await make_interpreter(client).interpret(
-        "cercle de centre O et de rayon 3", ConstructionState(), "fr", []
+        "cercle de centre O et de rayon 3", triangle_points, "fr", []
     )
 
     assert actions == [CreatePoint(name="O"), CreateCircle(center="O", radius=3)]
-    assert len(client.requests) == 3
-    assert client.requests[0]["tool_choice"] == "required"
-    assert client.requests[1]["tool_choice"] == "auto"
-    # The second request carries the first call and its result.
-    assistant, tool_result = client.requests[1]["messages"][-2:]
-    assert assistant["tool_calls"][0]["function"]["name"] == "create_point"
-    assert tool_result["role"] == "tool"
-    assert tool_result["tool_call_id"] == assistant["tool_calls"][0]["id"]
-
-
-async def test_several_calls_in_one_round(triangle_points: ConstructionState) -> None:
-    client = FakeGroqClient(
-        [
-            tool_call("create_point", '{"name": "D", "x": 2, "y": 2}'),
-            tool_call("create_segment", '{"start": "A", "end": "D"}'),
-        ],
-    )
-    actions = await make_interpreter(client).interpret("place D en 2 2", triangle_points, "fr", [])
-
-    assert actions == [CreatePoint(name="D", x=2, y=2), CreateSegment(start="A", end="D")]
+    assert len(client.requests) == 1
     request = client.requests[0]
     assert request["model"] == "test-model"
-    assert request["messages"][-1] == {"role": "user", "content": "place D en 2 2"}
+    assert request["tool_choice"] == "required"
+    assert [tool["function"]["name"] for tool in request["tools"]] == [TOOL_NAME]
+    assert request["messages"][-1] == {
+        "role": "user",
+        "content": "cercle de centre O et de rayon 3",
+    }
     assert "- A: point at (0, 0)" in request["messages"][0]["content"]
 
 
-async def test_invalid_call_is_sent_back_for_correction() -> None:
+async def test_split_calls_are_concatenated() -> None:
     client = FakeGroqClient(
-        [tool_call("create_segment", '{"start": "A", "end": "A"}')],
-        [tool_call("create_segment", '{"start": "A", "end": "B"}')],
+        [
+            apply_actions({"action": "create_point", "name": "A"}),
+            apply_actions({"action": "create_point", "name": "B"}),
+        ]
+    )
+    actions = await make_interpreter(client).interpret("A et B", ConstructionState(), "fr", [])
+    assert actions == [CreatePoint(name="A"), CreatePoint(name="B")]
+
+
+async def test_invalid_call_is_sent_back_for_correction() -> None:
+    bad = apply_actions({"action": "create_segment", "start": "A", "end": "A"})
+    client = FakeGroqClient(
+        [bad], [apply_actions({"action": "create_segment", "start": "A", "end": "B"})]
     )
     actions = await make_interpreter(client).interpret("segment AB", ConstructionState(), "fr", [])
 
     assert actions == [CreateSegment(start="A", end="B")]
-    assert client.requests[1]["messages"][-1]["content"].startswith("Error:")
+    assert len(client.requests) == 2
+    assistant, tool_result, reminder = client.requests[1]["messages"][-3:]
+    assert assistant["tool_calls"][0]["id"] == bad.id
+    assert tool_result["tool_call_id"] == bad.id
+    assert tool_result["content"].startswith("Error: action 1: invalid create_segment")
+    assert reminder["role"] == "user"
 
 
-async def test_clarification_stops_the_loop() -> None:
-    client = FakeGroqClient(
-        [tool_call("ask_clarification", '{"question": "Quel point ?"}')],
-        [tool_call("create_point", "{}")],
-    )
-    actions = await make_interpreter(client).interpret("trace", ConstructionState(), "fr", [])
-
-    assert actions == [AskClarification(question="Quel point ?")]
-    assert len(client.requests) == 1
-
-
-async def test_loop_is_bounded() -> None:
-    client = FakeGroqClient(*([tool_call("create_point", "{}")] for _ in range(MAX_ROUNDS + 5)))
-    actions = await make_interpreter(client).interpret("points", ConstructionState(), "fr", [])
-    assert len(actions) == MAX_ROUNDS
+async def test_gives_up_after_max_attempts() -> None:
+    bad = [apply_actions({"action": "rm_rf"})]
+    client = FakeGroqClient(*([bad] * MAX_ATTEMPTS))
+    with pytest.raises(InterpretationError):
+        await make_interpreter(client).interpret("rm", ConstructionState(), "fr", [])
+    assert len(client.requests) == MAX_ATTEMPTS
 
 
 async def test_history_is_sent_before_the_new_message() -> None:
-    client = FakeGroqClient([tool_call("create_point", '{"name": "B"}')])
+    client = FakeGroqClient([apply_actions({"action": "create_point", "name": "B"})])
     history = [Exchange(user="place le point A", assistant="Point A placé en (0 ; 0).")]
     await make_interpreter(client).interpret("non, B", ConstructionState(), "fr", history)
 
@@ -135,12 +132,6 @@ async def test_no_tool_call_is_an_interpretation_error() -> None:
         await make_interpreter(FakeGroqClient(None)).interpret(
             "bonjour", ConstructionState(), "fr", []
         )
-
-
-async def test_only_invalid_calls_is_an_interpretation_error() -> None:
-    client = FakeGroqClient([tool_call("create_segment", '{"start": "A", "end": "A"}')])
-    with pytest.raises(InterpretationError):
-        await make_interpreter(client).interpret("segment AA", ConstructionState(), "fr", [])
 
 
 def test_prompt_describes_figure_and_language(triangle_points: ConstructionState) -> None:
