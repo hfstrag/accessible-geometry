@@ -1,0 +1,195 @@
+# Phrase test set for the LLM interpreter, run against the real model with
+#     uv run python -m tests.eval.run_eval
+# It needs GROQ_API_KEY and is not part of pytest or CI.
+#
+# Each case: id, language (fr / en), text, optional figure and history, and expect.
+#   figure:   {points: {A: [0, 0]}, segments: [AB], lines: [AB],
+#              circles: [{name: c, center: O, radius: 2}]}
+#   history:  [{user: ..., assistant: ...}]
+#   expect:
+#     status:        executed (default) | clarification | rejected, or a list of accepted ones
+#     new_points:    exact number of points created
+#     points:        names that must exist afterwards, or {name: [x, y]}
+#     absent:        names that must not exist afterwards
+#     segments / lines / rays: required objects, e.g. [AB, BC]
+#     new_segments:  exact number of segments created
+#     circles:       [{center: O, radius: 2}] or [{center: O, through: A}]
+#     distances:     {AB: 4}
+#     equal:         [[AB, AC]]  (equal lengths)
+#     right_angles:  [ABC]       (angle at B is 90°)
+#     not_collinear: [ABC]
+#     undo / redo:   number of undo / redo steps
+#     in_view:       false to skip the check that new points stay in -10..10 x -8..8
+
+# --- Initiative: missing names and positions -------------------------------------------
+
+- id: triangle-fr
+  language: fr
+  text: trace un triangle
+  expect: {new_points: 3, new_segments: 3, segments: [AB, BC, CA], not_collinear: [ABC]}
+
+- id: triangle-en
+  language: en
+  text: draw a triangle
+  expect: {new_points: 3, new_segments: 3, segments: [AB, BC, CA], not_collinear: [ABC]}
+
+- id: three-points-fr
+  language: fr
+  text: place trois points
+  expect: {new_points: 3, new_segments: 0, points: [A, B, C]}
+
+- id: one-point-en
+  language: en
+  text: put a point
+  expect: {new_points: 1, new_segments: 0}
+
+- id: named-triangle-fr
+  language: fr
+  text: trace le triangle EFG
+  expect: {new_points: 3, segments: [EF, FG, GE], not_collinear: [EFG]}
+
+- id: next-free-letters
+  language: fr
+  text: place deux points
+  figure: {points: {A: [0, 0], B: [4, 0]}}
+  expect: {new_points: 2, points: [C, D]}
+
+# --- Circles ---------------------------------------------------------------------------
+
+- id: circle-radius-no-center-fr
+  language: fr
+  text: trace un cercle de rayon 2
+  expect: {new_points: 1, circles: [{radius: 2}]}
+
+- id: circle-missing-center-fr
+  language: fr
+  text: cercle de centre O et de rayon 3
+  expect: {new_points: 1, points: [O], circles: [{center: O, radius: 3}]}
+
+- id: circle-through-en
+  language: en
+  text: circle with center A through B
+  figure: {points: {A: [0, 0], B: [3, 0]}}
+  expect: {new_points: 0, circles: [{center: A, through: B}]}
+
+# --- Exact shapes ----------------------------------------------------------------------
+
+- id: square-fr
+  language: fr
+  text: trace un carré ABCD de côté 4
+  expect:
+    new_points: 4
+    segments: [AB, BC, CD, DA]
+    distances: {AB: 4, BC: 4, CD: 4, DA: 4}
+    right_angles: [ABC, BCD]
+
+- id: square-en
+  language: en
+  text: draw a square ABCD with sides of 3 centimeters
+  expect:
+    new_points: 4
+    segments: [AB, BC, CD, DA]
+    distances: {AB: 3, BC: 3, CD: 3, DA: 3}
+    right_angles: [ABC, BCD]
+
+- id: rectangle-fr
+  language: fr
+  text: construis un rectangle ABCD de longueur 5 et de largeur 3
+  expect:
+    new_points: 4
+    segments: [AB, BC, CD, DA]
+    right_angles: [ABC, BCD, CDA]
+    distances: {AB: 5, BC: 3}
+
+- id: equilateral-fr
+  language: fr
+  text: trace un triangle équilatéral ABC de côté 5
+  expect: {new_points: 3, segments: [AB, BC, CA], distances: {AB: 5, BC: 5, CA: 5}}
+
+- id: isosceles-en
+  language: en
+  text: draw a triangle ABC isosceles at A
+  expect: {new_points: 3, segments: [AB, BC, CA], equal: [[AB, AC]], not_collinear: [ABC]}
+
+- id: right-triangle-fr
+  language: fr
+  text: trace un triangle ABC rectangle en B
+  expect: {new_points: 3, segments: [AB, BC, CA], right_angles: [ABC]}
+
+- id: segment-length-fr
+  language: fr
+  text: trace un segment [AB] de 6 centimètres
+  expect: {new_points: 2, segments: [AB], distances: {AB: 6}}
+
+# --- Midpoints -------------------------------------------------------------------------
+
+- id: midpoint-fr
+  language: fr
+  text: place le milieu de AB
+  figure: {points: {A: [0, 0], B: [4, 2]}, segments: [AB]}
+  expect: {new_points: 1, points: {I: [2, 1]}}
+
+- id: midpoint-named-en
+  language: en
+  text: place M the midpoint of A B
+  figure: {points: {A: [-2, 1], B: [4, 3]}}
+  expect: {new_points: 1, points: {M: [1, 2]}}
+
+# --- Existing figure, multi-step, speech errors ----------------------------------------
+
+- id: coordinates-fr
+  language: fr
+  text: place le point A de coordonnées trois virgule cinq et moins deux
+  expect: {new_points: 1, points: {A: [3.5, -2]}}
+
+- id: phonetic-letters-fr
+  language: fr
+  text: trace le segment a bé
+  figure: {points: {A: [0, 0], B: [4, 0]}}
+  expect: {new_points: 0, new_segments: 1, segments: [AB]}
+
+- id: line-then-delete-fr
+  language: fr
+  text: trace la droite AB puis efface le point C
+  figure: {points: {A: [0, 0], B: [4, 0], C: [2, 3]}}
+  expect: {new_points: 0, lines: [AB], absent: [C]}
+
+- id: segments-with-missing-point-en
+  language: en
+  text: draw segments AB and AC
+  figure: {points: {A: [0, 0], B: [4, 0]}}
+  expect: {new_points: 1, points: [C], segments: [AB, AC]}
+
+- id: undo-twice-fr
+  language: fr
+  text: annule les deux dernières actions
+  figure: {points: {A: [0, 0], B: [4, 0]}}
+  expect: {undo: 2}
+
+- id: correction-with-history-fr
+  language: fr
+  text: non, de rayon 4
+  figure: {points: {O: [0, 0]}, circles: [{name: c, center: O, radius: 3}]}
+  history:
+    - user: trace le cercle de centre O et de rayon 3
+      assistant: Cercle de centre O et de rayon 3 tracé.
+  expect: {new_points: 0, circles: [{center: O, radius: 4}], absent: [c]}
+
+# --- Cannot act ------------------------------------------------------------------------
+
+- id: perpendicular-not-supported-fr
+  language: fr
+  text: trace la perpendiculaire à (AB) passant par A
+  figure: {points: {A: [0, 0], B: [4, 0]}, lines: [AB]}
+  expect: {status: clarification}
+
+- id: off-topic-en
+  language: en
+  text: what's the weather like today
+  expect: {status: clarification}
+
+- id: delete-missing-fr
+  language: fr
+  text: efface le point Z
+  figure: {points: {A: [0, 0]}}
+  expect: {status: [clarification, rejected], absent: [Z]}

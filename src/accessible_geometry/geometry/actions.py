@@ -44,7 +44,11 @@ def _require_distinct(first: str, second: str) -> None:
 
 
 class CreatePoint(GeometryAction):
-    """Place a new point. Give x and y only if the student said the coordinates."""
+    """Place a new point at (x, y): the student's coordinates, or ones you choose.
+
+    Omit x and y only for a lone point whose position does not matter: the app then
+    picks a free spot.
+    """
 
     action_name: ClassVar[str] = "create_point"
 
@@ -152,7 +156,10 @@ class Redo(GeometryAction):
 
 
 class AskClarification(GeometryAction):
-    """Ask the student one short question when the request is ambiguous or impossible."""
+    """Tell the student, in one short sentence, why the request cannot be carried out.
+
+    Use it alone and only as a last resort: choose missing names and positions yourself.
+    """
 
     action_name: ClassVar[str] = "ask_clarification"
 

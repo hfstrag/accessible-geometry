@@ -13,6 +13,7 @@ uv run uvicorn --factory accessible_geometry.main:create_app --reload   # dev se
 uv run pytest                                              # tests (offline, no API key)
 uv run ruff check . && uv run ruff format .                # lint + format
 uv run mypy                                                # strict type check
+uv run python -m tests.eval.run_eval [ids]                 # phrase eval, real Groq (key needed)
 ```
 
 Run pytest, ruff and mypy before every commit; CI (`.github/workflows/ci.yml`) runs all three

@@ -28,21 +28,27 @@ undo and redo; spoken feedback; dev logging; 73 offline tests; CI.
 
 ## Next
 
-### 1. Make the LLM take initiative (in progress, awaiting go-ahead)
+### 1. Make the LLM take initiative (done)
 
-Probing showed the model asks questions instead of acting ("trace un triangle", "place
+Probing showed the model asked questions instead of acting ("trace un triangle", "place
 trois points", "cercle de rayon 2", "milieu de AB"), and "carré ABCD de côté 4" drew a
-shape that is not a square. Causes: the prompt says to never invent coordinates and to
-ask when anything is ambiguous, there are no worked examples, and some actions are missing.
+shape that was not a square.
 
-- [ ] Prompt: choose names and positions by itself, compute exact coordinates for regular
-      shapes, create missing points (e.g. a circle's center), and say what it chose. Ask
-      only when the request cannot be carried out. This reverses the earlier "ask rather
-      than guess" default.
-- [ ] Add 6–8 worked FR/EN examples to the system prompt.
-- [ ] Phrase test set: phrases with expected outcomes (e.g. `tests/eval/phrases.yaml`) and a
-      script that runs them against the real model and gives a score. Kept out of pytest
-      and CI because it needs the API key.
+- [x] Prompt: the model chooses names (next free letters, O for a center, I for a
+      midpoint) and positions (near the origin, sides of 3–5), computes exact coordinates
+      for named shapes, and creates missing points. It asks only when it cannot act. This
+      reverses the earlier "ask rather than guess" default. The spoken feedback already
+      gives the chosen names and coordinates.
+- [x] 8 worked FR/EN examples in the system prompt.
+- [x] Phrase test set `tests/eval/phrases.yaml` (27 cases) and runner
+      `uv run python -m tests.eval.run_eval`: 27/27 with `openai/gpt-oss-120b`
+      (2026-11-19, ~8 min because of rate limits). Kept out of CI; the runner itself is
+      tested offline in `tests/test_eval_runner.py`.
+
+Stopgap to revisit in milestone 2: a midpoint is a free point at computed coordinates,
+not a GeoGebra `Midpoint`, so it would not follow A or B once points can be moved.
+The view is not checked: the prompt keeps figures in x -5..8, y -4..5, but whether that
+fits GeoGebra's default view on a school screen has not been checked in the browser.
 
 ### 2. Milestone 2: collège vocabulary
 
