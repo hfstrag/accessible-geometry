@@ -93,6 +93,10 @@ export class GeoGebraBoard {
         }
         created.push(...this.api.getAllObjectNames().filter((name) => !before.has(name)));
         dirty = true;
+      } else if (step.op === "clear") {
+        this.deleteAll();
+        created.length = 0;
+        dirty = true;
       } else if (step.op === "undo" || step.op === "redo") {
         if (dirty) {
           this.api.setUndoPoint();
@@ -103,6 +107,21 @@ export class GeoGebraBoard {
     }
     if (dirty) this.api.setUndoPoint();
     return { ok: true };
+  }
+
+  /** Delete the whole figure as one undo step. Returns false if it was already empty. */
+  clear() {
+    if (this.api.getAllObjectNames().length === 0) return false;
+    this.deleteAll();
+    this.api.setUndoPoint();
+    return true;
+  }
+
+  deleteAll() {
+    // Deleting an object also deletes the objects built from it: check before each one.
+    for (const name of this.api.getAllObjectNames()) {
+      if (this.api.exists(name)) this.api.deleteObject(name);
+    }
   }
 
   /** Replace each {{name}} in `message` with the value GeoGebra computed for `name`. */

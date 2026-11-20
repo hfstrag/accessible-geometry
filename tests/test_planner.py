@@ -3,6 +3,7 @@ import pytest
 from accessible_geometry.errors import PlanningError
 from accessible_geometry.geometry.actions import (
     AskClarification,
+    ClearFigure,
     CreateCircle,
     CreateLine,
     CreatePoint,
@@ -12,7 +13,13 @@ from accessible_geometry.geometry.actions import (
     Redo,
     Undo,
 )
-from accessible_geometry.geometry.planner import EvalStep, RedoStep, UndoStep, plan_actions
+from accessible_geometry.geometry.planner import (
+    ClearStep,
+    EvalStep,
+    RedoStep,
+    UndoStep,
+    plan_actions,
+)
 from accessible_geometry.geometry.state import ConstructionState, GeoObject
 
 EMPTY = ConstructionState()
@@ -138,3 +145,21 @@ def test_state_points_without_coordinates_do_not_block_placement() -> None:
     state = ConstructionState(objects=[GeoObject(name="A", type="point")])
     plan = plan_actions([CreatePoint()], state, "en")
     assert commands(plan.steps) == ["B = (0, 0)"]
+
+
+class TestClearFigure:
+    def test_clear_is_one_step(self, triangle_points: ConstructionState) -> None:
+        plan = plan_actions([ClearFigure()], triangle_points, "fr")
+        assert plan.steps == [ClearStep()]
+        assert plan.message == "Figure effacée. Dites « annule » pour la retrouver."
+
+    def test_objects_are_gone_afterwards(self, triangle_points: ConstructionState) -> None:
+        with pytest.raises(PlanningError):
+            plan_actions([ClearFigure(), CreateSegment(start="A", end="B")], triangle_points, "en")
+        plan = plan_actions([ClearFigure(), CreatePoint(name="A", x=1, y=1)], triangle_points, "en")
+        assert plan.steps[1] == EvalStep(command="A = (1, 1)", label="A")
+
+    def test_empty_figure(self) -> None:
+        plan = plan_actions([ClearFigure()], EMPTY, "en")
+        assert plan.steps == []
+        assert plan.message == "The figure is already empty."

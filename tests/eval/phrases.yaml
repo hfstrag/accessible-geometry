@@ -19,6 +19,7 @@
 #     right_angles:  [ABC]       (angle at B is 90°)
 #     not_collinear: [ABC]
 #     undo / redo:   number of undo / redo steps
+#     cleared:       true if the whole figure must be cleared, false if it must not
 #     commands:      regular expressions that some GeoGebra command must match fully
 #     in_view:       false to skip the check that new points stay in -10..10 x -8..8
 
@@ -319,3 +320,49 @@
   text: move point B to 2, 5
   figure: {points: {A: [0, 0], B: [4, 0]}}
   expect: {new_points: 0, points: {B: [2, 5]}}
+
+# --- Clearing and cancelling -----------------------------------------------------------
+
+- id: clear-all-fr
+  language: fr
+  text: efface tout
+  figure: {points: {A: [0, 0], B: [4, 0]}, segments: [AB]}
+  expect: {cleared: true, absent: [A, B]}
+
+- id: clear-restart-fr
+  language: fr
+  text: on recommence une nouvelle figure
+  figure: {points: {A: [0, 0], B: [4, 0], C: [1, 3]}, segments: [AB, BC, CA]}
+  expect: {cleared: true}
+
+- id: clear-all-en
+  language: en
+  text: delete everything
+  figure: {points: {A: [0, 0], B: [4, 0]}}
+  expect: {cleared: true}
+
+- id: cancel-last-figure-fr
+  language: fr
+  text: annule la dernière figure
+  figure: {points: {A: [0, 0], B: [4, 0], C: [1, 3]}, segments: [AB, BC, CA]}
+  history:
+    - user: trace un triangle ABC
+      assistant: Point A placé en (0 ; 0). Point B placé en (4 ; 0). Point C placé en (1 ; 3). Segment [AB] tracé. Segment [BC] tracé. Segment [CA] tracé.
+  expect: {undo: 1, cleared: false}
+
+- id: cancel-that-en
+  language: en
+  text: cancel that
+  figure: {points: {O: [0, 0]}, circles: [{name: c, center: O, radius: 3}]}
+  history:
+    - user: draw a circle with center O and radius 3
+      assistant: Circle with center O and radius 3 drawn.
+  expect: {undo: 1, cleared: false}
+
+- id: delete-last-circle-fr
+  language: fr
+  text: efface le dernier cercle
+  figure:
+    points: {O: [0, 0], A: [4, 0]}
+    circles: [{name: c, center: O, radius: 2}, {name: e, center: A, radius: 1}]
+  expect: {absent: [e], cleared: false, undo: 0, commands: ['Delete\(e\)']}

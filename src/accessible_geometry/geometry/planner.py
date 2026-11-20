@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from accessible_geometry.errors import PlanningError
 from accessible_geometry.geometry.actions import (
     AskClarification,
+    ClearFigure,
     CreateCircle,
     CreateLine,
     CreatePoint,
@@ -73,6 +74,12 @@ class EvalStep(BaseModel):
     script: bool = False
 
 
+class ClearStep(BaseModel):
+    """Delete every object of the figure, as one undoable step."""
+
+    op: Literal["clear"] = "clear"
+
+
 class UndoStep(BaseModel):
     op: Literal["undo"] = "undo"
 
@@ -81,7 +88,7 @@ class RedoStep(BaseModel):
     op: Literal["redo"] = "redo"
 
 
-Step = Annotated[EvalStep | UndoStep | RedoStep, Field(discriminator="op")]
+Step = Annotated[EvalStep | ClearStep | UndoStep | RedoStep, Field(discriminator="op")]
 PlanStatus = Literal["executed", "clarification"]
 
 
@@ -163,6 +170,14 @@ class _Planner:
                 del self._objects[name]
                 plan.steps.append(EvalStep(command=f"Delete({name})"))
                 plan.messages.append(self._t("object_deleted", name=name))
+            case ClearFigure():
+                if not self._objects:
+                    plan.messages.append(self._t("figure_already_empty"))
+                    return
+                self._objects.clear()
+                self._point_positions.clear()
+                plan.steps.append(ClearStep())
+                plan.messages.append(self._t("figure_cleared"))
             case Undo(steps=count):
                 plan.steps.extend(UndoStep() for _ in range(count))
                 plan.messages.append(

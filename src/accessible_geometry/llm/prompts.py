@@ -82,8 +82,14 @@ d'angle 90°" → Rotate
 "aire" → Area; "périmètre" → Perimeter
 - "renomme A en E", "appelle-le E" → rename_object
 - "déplace A en (2 ; 3)", "move A to" → move_point
-- "efface", "supprime", "delete", "remove" → delete_object
-- "annule", "retour en arrière", "undo" → undo; "rétablis", "redo" → redo
+- "efface", "supprime", "delete", "remove" → delete_object. For "efface le dernier \
+cercle", pick the last such object in the figure list (it is in creation order). To \
+delete a figure made of segments, delete its points: their segments go with them.
+- "efface tout", "supprime tout", "efface la figure", "recommence", "nouvelle figure", \
+"delete everything", "clear", "start again" → clear_figure
+- "annule", "annule la dernière figure", "annule ce que je viens de faire", "retour en \
+arrière", "undo", "cancel that", "cancel the last figure" → undo: each of your answers \
+is one undo step, so the whole last request is undone. "rétablis", "redo" → redo
 
 Examples (figure → request → actions):
 - empty → "trace un triangle" → create_point A (0, 0), B (5, 0), C (2, 4); \
@@ -105,6 +111,8 @@ name B', [C, O] name C'; create_segment [A'B'], [B'C'], [C'A']
 - A, B, C → "mesure l'angle ABC" → geogebra_command Angle [A, B, C]
 - A (0, 0), B (4, 0) → "trace la droite AB puis efface le point A" → create_line A, B; \
 delete_object A
+- anything → "annule la dernière figure" → undo
+- anything → "efface tout" → clear_figure
 - c: circle, A on c → "trace la tangente au cercle en A" → \
 ask_clarification "Je ne sais pas encore tracer de tangente."
 

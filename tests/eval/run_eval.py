@@ -27,7 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from accessible_geometry.config import get_settings
 from accessible_geometry.conversation import Exchange
-from accessible_geometry.geometry.planner import EvalStep, RedoStep, UndoStep
+from accessible_geometry.geometry.planner import ClearStep, EvalStep, RedoStep, UndoStep
 from accessible_geometry.geometry.state import ConstructionState, GeoObject
 from accessible_geometry.llm.interpreter import GroqInterpreter
 from accessible_geometry.service import CommandResult, CommandStatus, VoiceCommandService
@@ -80,6 +80,7 @@ class Expect(_Strict):
     not_collinear: list[str] = []
     undo: int | None = None
     redo: int | None = None
+    cleared: bool | None = None
     commands: list[str] = []  # regular expressions, each matching a GeoGebra command
     in_view: bool = True
 
@@ -130,6 +131,7 @@ class Figure:
     commands: list[str] = field(default_factory=list)
     undo: int = 0
     redo: int = 0
+    cleared: bool = False
     _auto: int = 0
 
     @classmethod
@@ -167,6 +169,10 @@ class Figure:
                 self.undo += 1
             elif isinstance(step, RedoStep):
                 self.redo += 1
+            elif isinstance(step, ClearStep):
+                self.points.clear()
+                self.shapes.clear()
+                self.cleared = True
             elif isinstance(step, EvalStep):
                 self._eval(step.command)
 
@@ -379,6 +385,8 @@ def _check_figure(expect: Expect, before: Figure, after: Figure) -> list[str]:
     ):
         if wanted is not None and got != wanted:
             failures.append(f"{got} {label} steps, expected {wanted}")
+    if expect.cleared is not None and after.cleared != expect.cleared:
+        failures.append("the figure was not cleared" if expect.cleared else "figure cleared")
 
     if expect.in_view:
         for name, (x, y) in after.points.items():

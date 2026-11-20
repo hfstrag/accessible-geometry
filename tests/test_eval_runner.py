@@ -2,7 +2,7 @@
 
 import pytest
 
-from accessible_geometry.geometry.planner import EvalStep, UndoStep
+from accessible_geometry.geometry.planner import ClearStep, EvalStep, UndoStep
 from accessible_geometry.service import CommandResult
 from tests.eval.run_eval import Case, Figure, check, load_cases, split_names
 
@@ -127,3 +127,11 @@ def test_figure_objects_get_geogebra_style_names() -> None:
     )
     state = figure.to_state()
     assert [(o.name, o.definition) for o in state.objects][-1] == ("f", "Line(A, B)")
+
+
+def test_clear_step() -> None:
+    figure = {"points": {"A": [0, 0]}}
+    cleared = CommandResult(status="executed", transcript="", message="", steps=[ClearStep()])
+    assert _check(_case({"cleared": True, "absent": ["A"]}, figure), cleared) == []
+    assert _check(_case({"cleared": False}, figure), cleared) == ["figure cleared"]
+    assert _check(_case({"cleared": True}, figure), _result()) == ["the figure was not cleared"]

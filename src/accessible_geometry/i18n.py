@@ -104,6 +104,14 @@ _MESSAGES: dict[str, dict[Language, str]] = {
         "fr": "{name} supprimé.",
         "en": "{name} deleted.",
     },
+    "figure_cleared": {
+        "fr": "Figure effacée. Dites « annule » pour la retrouver.",
+        "en": 'Figure cleared. Say "undo" to bring it back.',
+    },
+    "figure_already_empty": {
+        "fr": "La figure est déjà vide.",
+        "en": "The figure is already empty.",
+    },
     "undone": {
         "fr": "Dernière action annulée.",
         "en": "Last action undone.",

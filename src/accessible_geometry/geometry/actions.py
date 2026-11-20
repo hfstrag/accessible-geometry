@@ -224,6 +224,12 @@ class MovePoint(GeometryAction):
     y: Coordinate
 
 
+class ClearFigure(GeometryAction):
+    """Delete the whole figure ("efface tout", "recommence"). Undo brings it back."""
+
+    action_name: ClassVar[str] = "clear_figure"
+
+
 class Undo(GeometryAction):
     """Undo the last action(s) ("annule", "retour en arrière")."""
 
@@ -261,6 +267,7 @@ ACTION_TYPES: tuple[type[GeometryAction], ...] = (
     RenameObject,
     MovePoint,
     DeleteObject,
+    ClearFigure,
     Undo,
     Redo,
     AskClarification,

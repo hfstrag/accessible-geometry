@@ -21,6 +21,9 @@ const STRINGS = {
     micDenied: "Le micro n'est pas accessible. Vérifiez l'autorisation du navigateur.",
     serverError: "Le serveur ne répond pas. Réessayez.",
     executionFailed: "GeoGebra n'a pas pu exécuter la commande. Rien n'a été modifié.",
+    clearButton: "Effacer la figure",
+    figureCleared: "Figure effacée. Dites « annule » pour la retrouver.",
+    figureEmpty: "La figure est déjà vide.",
   },
   en: {
     title: "Voice Geometry",
@@ -41,6 +44,9 @@ const STRINGS = {
     micDenied: "The microphone is not available. Check the browser permission.",
     serverError: "The server is not responding. Try again.",
     executionFailed: "GeoGebra could not run the command. Nothing was changed.",
+    clearButton: "Clear the figure",
+    figureCleared: 'Figure cleared. Say "undo" to bring it back.',
+    figureEmpty: "The figure is already empty.",
   },
 };
 

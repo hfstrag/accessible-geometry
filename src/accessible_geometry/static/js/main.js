@@ -13,6 +13,7 @@ const elements = {
   language: document.getElementById("language"),
   talkButton: document.getElementById("talk-button"),
   talkLabel: document.getElementById("talk-label"),
+  clearButton: document.getElementById("clear-button"),
   status: document.getElementById("status"),
   history: document.getElementById("history"),
   textForm: document.getElementById("text-form"),
@@ -65,6 +66,7 @@ function updateTalkButton() {
   const recording = recorder.isRecording;
   elements.talkButton.setAttribute("aria-pressed", String(recording));
   elements.talkButton.disabled = busy || !board;
+  elements.clearButton.disabled = busy || !board || recording;
   elements.talkLabel.textContent = t(language, recording ? "talkRecording" : "talkIdle");
 }
 
@@ -135,6 +137,13 @@ function bindEvents() {
   // Button: press once to start, once more to send (easier than holding for many students).
   elements.talkButton.addEventListener("click", () => {
     recorder.isRecording ? stopRecordingAndSend() : startRecording();
+  });
+
+  // Clear by hand (e.g. a teacher helping). One undo step: "annule" brings the figure back.
+  elements.clearButton.addEventListener("click", () => {
+    if (busy || !board) return;
+    stopSpeaking();
+    report(t(language, board.clear() ? "figureCleared" : "figureEmpty"));
   });
 
   // Space: hold to talk. Captured on window so it works even when GeoGebra has focus.
