@@ -45,21 +45,36 @@ shape that was not a square.
       (2026-11-19, ~8 min because of rate limits). Kept out of CI; the runner itself is
       tested offline in `tests/test_eval_runner.py`.
 
-Stopgap to revisit in milestone 2: a midpoint is a free point at computed coordinates,
-not a GeoGebra `Midpoint`, so it would not follow A or B once points can be moved.
 The view is not checked: the prompt keeps figures in x -5..8, y -4..5, but whether that
 fits GeoGebra's default view on a school screen has not been checked in the browser.
 
-### 2. Milestone 2: collège vocabulary
+### 2. Milestone 2: collège vocabulary (done, pending browser testing by a person)
 
-Midpoints, perpendicular bisectors, angle bisectors, parallel and perpendicular lines,
-polygons, symmetries (central and axial), measuring lengths, angles and areas, renaming
-and moving points.
+Decision (2026-11-20): the LLM may request **whitelisted GeoGebra commands** through one
+`geogebra_command` action. It picks a command name and its arguments (object names or
+numbers); `geometry/commands.py` lists each command's typed overloads (point, line,
+circle, polygon, number, figure), and the planner checks the arguments against the
+figure and writes the GeoGebra syntax. Every overload has its own FR/EN message, so the
+feedback stays precise.
 
-- [ ] **Open question:** should the LLM also be allowed to use a whitelisted set of
-      GeoGebra commands (`Midpoint`, `PerpendicularBisector`, `Polygon`...), validated by
-      the server? This covers many more constructions quickly, but spoken feedback for
-      those commands would be less precise.
+- [x] Constructions: Midpoint, PerpendicularBisector, AngleBisector, PerpendicularLine,
+      ParallelLine, Polygon, Intersect (lines; circles with an index 1 or 2).
+- [x] Transformations: Reflect (central and axial symmetry), Translate, Rotate. Images
+      are named A', A''...
+- [x] Measures: Distance, Angle (never reflex), Area, Perimeter. The value is only known
+      in GeoGebra: the message holds `{{name}}`, filled in by the browser.
+- [x] `rename_object` and `move_point` actions (only free points can move).
+- [x] Midpoints are real GeoGebra `Midpoint`s now (the milestone 1 stopgap is gone).
+- [x] Checked in a real browser with the GeoGebra API (2026-11-20). That check found
+      and fixed: `Rename`/`SetCoords` return false although they work; a labelled
+      command silently redefines an existing object (the browser now refuses it, and
+      the planner reserves the names GeoGebra gives to polygon sides and images);
+      definitions come as `Line[A, B]` and free points as `(0, 0)`.
+- [ ] Phrase test set: 18 milestone 2 phrases added to `tests/eval/phrases.yaml` (45 in
+      all). The run was stopped on Groq rate limits before it finished: run it again with
+      a fresh quota (`uv run python -m tests.eval.run_eval`), tune the prompt on failures.
+- [ ] Try it by voice in the app: the full loop (speech, feedback, undo) with the new
+      commands has not been tested by a person yet.
 
 ### 3. Milestone 3: exercises
 
@@ -74,6 +89,9 @@ teachers.
 
 ## Known limitations
 
-- Free-tier Groq rate limits: commands sent back to back can wait 10–30 s.
+- Free-tier Groq rate limits: the free tier allows 8,000 tokens per minute and a
+  command now costs about 5,800 (the prompt and tool schema grew by about 50% in
+  milestone 2), so commands sent back to back can wait up to a minute. The prompt
+  could be trimmed if this becomes a problem.
 - The conversation history is lost when the page reloads.
 - The browser side (GeoGebra, microphone, speech) has no automated tests.

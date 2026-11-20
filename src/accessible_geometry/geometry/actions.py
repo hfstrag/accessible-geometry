@@ -9,11 +9,24 @@ models, so nothing unvalidated ever reaches GeoGebra.
 """
 
 import json
-from typing import Annotated, Any, ClassVar, Self
+from typing import Annotated, Any, ClassVar, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from accessible_geometry.errors import InterpretationError
+from accessible_geometry.geometry.commands import (
+    COMMAND_NAMES,
+    COMMANDS,
+    MAX_ARGS,
+    describe_commands,
+)
 
 # GeoGebra labels: a letter, then letters, digits, underscores or primes (A, C1, A_1, A').
 NAME_PATTERN = r"^[A-Za-z][A-Za-z0-9_']{0,15}$"
@@ -139,6 +152,78 @@ class DeleteObject(GeometryAction):
     name: ObjectName
 
 
+class GeoGebraCommand(GeometryAction):
+    """Run a GeoGebra construction, transformation or measure.
+
+    `args` are object names of the figure, or numbers. Kinds: "line" is a line,
+    segment or ray; "figure" is any point, line, circle or polygon. Available:
+    {commands}.
+    """
+
+    action_name: ClassVar[str] = "geogebra_command"
+
+    command: Literal[COMMAND_NAMES]  # type: ignore[valid-type]
+    args: list[ObjectName | float] = Field(min_length=1, max_length=MAX_ARGS)
+    name: ObjectName | None = Field(
+        default=None, description="Name of the created object, e.g. I, d or A'."
+    )
+
+    @field_validator("args", mode="before")
+    @classmethod
+    def _numbers_from_strings(cls, args: Any) -> Any:
+        """Accept "60" for 60: a name never starts with a digit or a sign."""
+        if not isinstance(args, list):
+            return args
+        return [_as_number(arg) for arg in args]
+
+    @model_validator(mode="after")
+    def _matches_an_overload(self) -> Self:
+        overloads = COMMANDS[self.command]
+        for overload in overloads:
+            if overload.accepts_count(len(self.args)) and all(
+                (overload.param(i) == "number") == isinstance(arg, float)
+                for i, arg in enumerate(self.args)
+            ):
+                return self
+        signatures = " or ".join(f"({', '.join(o.params)})" for o in overloads)
+        raise ValueError(f"{self.command} takes {signatures}")
+
+
+GeoGebraCommand.__doc__ = (GeoGebraCommand.__doc__ or "").format(commands=describe_commands())
+
+
+def _as_number(value: Any) -> Any:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.replace(",", "."))
+        except ValueError:
+            return value
+    return value
+
+
+class RenameObject(GeometryAction):
+    """Rename an object of the figure ("renomme A en E")."""
+
+    action_name: ClassVar[str] = "rename_object"
+
+    name: ObjectName
+    new_name: ObjectName
+
+
+class MovePoint(GeometryAction):
+    """Move a free point (one placed with create_point) to new coordinates."""
+
+    action_name: ClassVar[str] = "move_point"
+
+    name: PointName
+    x: Coordinate
+    y: Coordinate
+
+
 class Undo(GeometryAction):
     """Undo the last action(s) ("annule", "retour en arrière")."""
 
@@ -172,6 +257,9 @@ ACTION_TYPES: tuple[type[GeometryAction], ...] = (
     CreateLine,
     CreateRay,
     CreateCircle,
+    GeoGebraCommand,
+    RenameObject,
+    MovePoint,
     DeleteObject,
     Undo,
     Redo,

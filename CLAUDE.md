@@ -35,22 +35,28 @@ Browser (thin JS, no build step) ↔ Python backend (FastAPI), both in `src/acce
    the error (max 3 attempts). `llm/prompts.py` holds the system prompt.
 4. `geometry/actions.py`: the actions the LLM may request, as Pydantic models (docstring =
    description sent to the LLM). The LLM-facing schema is stripped of patterns/bounds/defaults
-   to save tokens; Pydantic still enforces them.
+   to save tokens; Pydantic still enforces them. `geometry/commands.py` is the whitelist of
+   GeoGebra commands (midpoint, perpendicular, symmetries, measures...) that the
+   `geogebra_command` action may request, with typed overloads.
 5. `geometry/planner.py`: validates actions against the figure and translates them to
    GeoGebra commands. All-or-nothing: any error rejects the whole request.
+   Measure messages hold a `{{name}}` placeholder that the browser fills with the value.
 6. Browser runs the steps with the GeoGebra Apps API (`static/js/geogebra.js`), rolls back
    on failure, makes each request one undo step, and speaks the feedback.
 
 ## Design rules
 
-- The LLM never writes raw GeoGebra commands: it picks validated actions and the planner
-  writes the commands.
+- The LLM never writes raw GeoGebra commands: it picks validated actions (or a whitelisted
+  command name with object names and numbers) and the planner writes the commands.
 - Feedback messages come from templates in `i18n.py` (FR + EN), not from the LLM.
 - Every user-facing string exists in French and English.
 - The tests never call Groq: use the fakes in `tests/fakes.py`, or the fake Groq client in
   `tests/test_interpreter.py`.
 - To add an action: model in `actions.py` + register in `ACTION_TYPES`, handle it in
   `planner.py`, messages in `i18n.py`, vocabulary in `prompts.py`, tests.
+- To add a GeoGebra command: an `Overload` in `commands.py`, its message in `i18n.py`,
+  vocabulary in `prompts.py`, tests, and an eval phrase in `tests/eval/phrases.yaml`
+  (teach `tests/eval/run_eval.py` the command if it is not listed in `Figure._eval`).
 
 ## Working with the user
 

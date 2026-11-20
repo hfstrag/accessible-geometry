@@ -1,6 +1,6 @@
 """Snapshot of the GeoGebra construction, sent by the browser with every command."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class GeoObject(BaseModel):
@@ -12,6 +12,12 @@ class GeoObject(BaseModel):
     value: str | None = Field(default=None, max_length=500)
     x: float | None = None
     y: float | None = None
+
+    @field_validator("definition")
+    @classmethod
+    def _round_brackets(cls, definition: str | None) -> str | None:
+        """GeoGebra writes "Line[A, B]"; the actions and the LLM prompt use "Line(A, B)"."""
+        return definition.replace("[", "(").replace("]", ")") if definition else definition
 
     @property
     def is_point(self) -> bool:

@@ -19,6 +19,7 @@
 #     right_angles:  [ABC]       (angle at B is 90°)
 #     not_collinear: [ABC]
 #     undo / redo:   number of undo / redo steps
+#     commands:      regular expressions that some GeoGebra command must match fully
 #     in_view:       false to skip the check that new points stay in -10..10 x -8..8
 
 # --- Initiative: missing names and positions -------------------------------------------
@@ -127,13 +128,13 @@
   language: fr
   text: place le milieu de AB
   figure: {points: {A: [0, 0], B: [4, 2]}, segments: [AB]}
-  expect: {new_points: 1, points: {I: [2, 1]}}
+  expect: {new_points: 1, points: {I: [2, 1]}, commands: ['I = Midpoint\((A, B|B, A)\)']}
 
 - id: midpoint-named-en
   language: en
   text: place M the midpoint of A B
   figure: {points: {A: [-2, 1], B: [4, 3]}}
-  expect: {new_points: 1, points: {M: [1, 2]}}
+  expect: {new_points: 1, points: {M: [1, 2]}, commands: ['M = Midpoint\((A, B|B, A)\)']}
 
 # --- Existing figure, multi-step, speech errors ----------------------------------------
 
@@ -177,12 +178,6 @@
 
 # --- Cannot act ------------------------------------------------------------------------
 
-- id: perpendicular-not-supported-fr
-  language: fr
-  text: trace la perpendiculaire à (AB) passant par A
-  figure: {points: {A: [0, 0], B: [4, 0]}, lines: [AB]}
-  expect: {status: clarification}
-
 - id: off-topic-en
   language: en
   text: what's the weather like today
@@ -193,3 +188,134 @@
   text: efface le point Z
   figure: {points: {A: [0, 0]}}
   expect: {status: [clarification, rejected], absent: [Z]}
+
+- id: tangent-not-supported-fr
+  language: fr
+  text: trace la tangente au cercle c au point A
+  figure: {points: {O: [0, 0], A: [3, 0]}, circles: [{name: c, center: O, through: A}]}
+  expect: {status: clarification}
+
+# --- Milestone 2: constructions --------------------------------------------------------
+# In figures, lines and segments are named like GeoGebra does: f, g, h...
+
+- id: perpendicular-fr
+  language: fr
+  text: trace la perpendiculaire à (AB) passant par C
+  figure: {points: {A: [0, 0], B: [4, 0], C: [1, 3]}, lines: [AB]}
+  expect: {new_points: 0, commands: ['\w+ = PerpendicularLine\(C, f\)']}
+
+- id: perpendicular-no-line-yet-fr
+  language: fr
+  text: trace la droite perpendiculaire à (AB) passant par A
+  figure: {points: {A: [0, 0], B: [4, 0]}}
+  expect: {new_points: 0, lines: [AB], commands: ['\w+ = PerpendicularLine\(A, \w+\)']}
+
+- id: parallel-en
+  language: en
+  text: draw the line through C parallel to AB
+  figure: {points: {A: [0, 0], B: [4, 0], C: [1, 3]}, lines: [AB]}
+  expect: {new_points: 0, commands: ['\w+ = Line\(C, f\)']}
+
+- id: perpendicular-bisector-fr
+  language: fr
+  text: construis la médiatrice du segment [AB]
+  figure: {points: {A: [0, 0], B: [4, 0]}, segments: [AB]}
+  expect: {new_points: 0, commands: ['\w+ = PerpendicularBisector\((A, B|B, A)\)']}
+
+- id: angle-bisector-fr
+  language: fr
+  text: trace la bissectrice de l'angle ABC
+  figure: {points: {A: [0, 3], B: [0, 0], C: [4, 0]}, segments: [BA, BC]}
+  expect: {new_points: 0, commands: ['\w+ = AngleBisector\((A, B, C|C, B, A)\)']}
+
+- id: intersection-fr
+  language: fr
+  text: place le point d'intersection E des droites (AB) et (CD)
+  figure:
+    points: {A: [0, 0], B: [4, 2], C: [0, 3], D: [4, 0]}
+    lines: [AB, CD]
+  expect: {new_points: 1, points: [E], commands: ['E = Intersect\([fg], [fg]\)']}
+
+- id: circle-intersections-fr
+  language: fr
+  text: place les deux points d'intersection des cercles c1 et c2
+  figure:
+    points: {A: [0, 0], B: [4, 0]}
+    circles: [{name: c1, center: A, radius: 3}, {name: c2, center: B, radius: 3}]
+  expect:
+    new_points: 2
+    commands: ['\w+ = Intersect\(c[12], c[12], 1\)', '\w+ = Intersect\(c[12], c[12], 2\)']
+
+- id: polygon-fr
+  language: fr
+  text: trace le polygone ABCD
+  figure: {points: {A: [0, 0], B: [4, 0], C: [5, 3], D: [1, 3]}}
+  expect: {new_points: 0, commands: ['\w+ = Polygon\(A, B, C, D\)']}
+
+# --- Milestone 2: transformations ------------------------------------------------------
+
+- id: central-symmetry-fr
+  language: fr
+  text: construis le symétrique de A par rapport à O
+  figure: {points: {A: [3, 1], O: [0, 0]}}
+  expect: {new_points: 1, points: {"A'": [-3, -1]}, commands: ['A'' = Reflect\(A, O\)']}
+
+- id: axial-symmetry-fr
+  language: fr
+  text: construis le symétrique du point C par rapport à la droite (AB)
+  figure: {points: {A: [0, 0], B: [4, 0], C: [1, 3]}, lines: [AB]}
+  expect: {new_points: 1, points: ["C'"], commands: ['C'' = Reflect\(C, f\)']}
+
+- id: triangle-symmetry-fr
+  language: fr
+  text: construis le symétrique du triangle ABC par rapport au point O
+  figure:
+    points: {A: [0, 0], B: [4, 0], C: [1, 3], O: [5, 2]}
+    segments: [AB, BC, CA]
+  expect:
+    points: {"A'": [10, 4], "B'": [6, 4], "C'": [9, 1]}
+    distances: {"A'B'": 4}
+
+- id: translation-en
+  language: en
+  text: translate point C by the translation that takes A to B
+  figure: {points: {A: [0, 0], B: [3, 1], C: [1, 3]}}
+  expect: {new_points: 1, points: {"C'": [4, 4]}}
+
+- id: rotation-fr
+  language: fr
+  text: fais tourner le point A de 90 degrés autour de O dans le sens inverse des aiguilles d'une montre
+  figure: {points: {A: [3, 0], O: [0, 0]}}
+  expect: {new_points: 1, points: {"A'": [0, 3]}}
+
+# --- Milestone 2: measures, rename, move -----------------------------------------------
+
+- id: measure-length-fr
+  language: fr
+  text: mesure le segment [AB]
+  figure: {points: {A: [0, 0], B: [3, 4]}, segments: [AB]}
+  expect: {new_points: 0, new_segments: 0, commands: ['\w+ = Distance\((A, B|B, A)\)']}
+
+- id: measure-angle-fr
+  language: fr
+  text: combien mesure l'angle ABC
+  figure: {points: {A: [0, 3], B: [0, 0], C: [4, 0]}, segments: [BA, BC]}
+  expect: {new_points: 0, commands: ['\w+ = If\(Angle\((A, B, C|C, B, A)\).*']}
+
+- id: area-triangle-en
+  language: en
+  text: what is the area of triangle ABC
+  figure: {points: {A: [0, 0], B: [4, 0], C: [0, 3]}, segments: [AB, BC, CA]}
+  expect: {new_points: 0, commands: ['\w+ = (Area|Polygon)\(A, B, C\)']}
+
+- id: rename-fr
+  language: fr
+  text: renomme le point C en E
+  figure: {points: {A: [0, 0], C: [2, 2]}}
+  expect: {new_points: 0, points: [E], absent: [C]}
+
+- id: move-en
+  language: en
+  text: move point B to 2, 5
+  figure: {points: {A: [0, 0], B: [4, 0]}}
+  expect: {new_points: 0, points: {B: [2, 5]}}

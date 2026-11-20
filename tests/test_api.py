@@ -64,7 +64,7 @@ def test_text_command(client: TestClient) -> None:
         "status": "executed",
         "transcript": "place A en 1 2",
         "message": "Point A placé en (1 ; 2).",
-        "steps": [{"op": "eval", "command": "A = (1, 2)"}],
+        "steps": [{"op": "eval", "command": "A = (1, 2)", "label": "A", "script": False}],
     }
 
 

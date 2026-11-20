@@ -85,3 +85,45 @@ def test_circles_and_view() -> None:
     assert _check(case, _result("O = (4, 0)", "Circle(O, 2)")) == []
     assert _check(case, _result("O = (4, 0)", "Circle(O, 3)")) != []
     assert _check(_case({}), _result("A = (40, 0)")) == ["A at (40, 0) is out of view"]
+
+
+def test_constructed_points_get_coordinates() -> None:
+    figure = {"points": {"A": [0, 0], "B": [4, 2], "O": [1, 1]}, "lines": ["AB"]}
+    case = _case(
+        {
+            "new_points": 4,
+            "points": {"I": [2, 1], "A'": [2, 2], "B'": [5, 3], "R": [-1, 1]},
+            "commands": [r"I = Midpoint\(A, B\)"],
+        },
+        figure,
+    )
+    result = _result(
+        "I = Midpoint(A, B)",
+        "A' = Reflect(A, O)",
+        "B' = Translate(B, Vector(A, O))",
+        "R = Reflect(O, f)",  # built from a line: no position
+    )
+    failures = _check(case, result)
+    assert failures == ["point R is constructed: its position is not computed here"]
+
+
+def test_rotation_rename_move_and_polygon() -> None:
+    figure = {"points": {"A": [3, 0], "O": [0, 0], "B": [1, 1]}}
+    case = _case(
+        {"points": {"A'": [0, 3], "E": [2, 5]}, "absent": ["B"], "segments": ["AO"]}, figure
+    )
+    result = _result(
+        "A' = Rotate(A, 90°, O)",
+        'Rename(B, "E")',
+        "SetCoords(E, 2, 5)",
+        "p1 = Polygon(A, O, E)",
+    )
+    assert _check(case, result) == []
+
+
+def test_figure_objects_get_geogebra_style_names() -> None:
+    figure = Figure.from_spec(
+        _case({}, {"points": {"A": [0, 0], "B": [1, 0]}, "lines": ["AB"]}).figure
+    )
+    state = figure.to_state()
+    assert [(o.name, o.definition) for o in state.objects][-1] == ("f", "Line(A, B)")

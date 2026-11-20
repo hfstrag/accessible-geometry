@@ -39,6 +39,8 @@ VIEW_X = 10.0
 VIEW_Y = 8.0
 
 Point = tuple[float, float]
+_NAME = r"[A-Za-z][A-Za-z0-9_']*"
+_NUM = r"-?\d+(?:\.\d+)?"
 
 
 # --- Test set format -------------------------------------------------------------------
@@ -78,6 +80,7 @@ class Expect(_Strict):
     not_collinear: list[str] = []
     undo: int | None = None
     redo: int | None = None
+    commands: list[str] = []  # regular expressions, each matching a GeoGebra command
     in_view: bool = True
 
 
@@ -112,7 +115,7 @@ def split_names(text: str) -> list[str]:
 
 @dataclass
 class Shape:
-    kind: Literal["segment", "line", "ray", "circle"]
+    kind: str  # segment, line, ray, circle, polygon, number, or point without coordinates
     refs: tuple[str, ...]  # point names the shape is defined from
     radius: float | None = None
 
@@ -124,6 +127,7 @@ class Figure:
     points: dict[str, Point] = field(default_factory=dict)
     shapes: dict[str, Shape] = field(default_factory=dict)
     created: dict[str, int] = field(default_factory=dict)
+    commands: list[str] = field(default_factory=list)
     undo: int = 0
     redo: int = 0
     _auto: int = 0
@@ -167,12 +171,77 @@ class Figure:
                 self._eval(step.command)
 
     def _eval(self, command: str) -> None:
-        name = r"[A-Za-z][A-Za-z0-9_']*"
-        num = r"-?\d+(?:\.\d+)?"
-        if m := re.fullmatch(rf"({name}) = \(({num}), ({num})\)", command):
+        self.commands.append(command)
+        if m := re.fullmatch(rf"({_NAME}) = \(({_NUM}), ({_NUM})\)", command):
             self.points[m[1]] = (float(m[2]), float(m[3]))
             self._count("point")
+        elif m := re.fullmatch(rf"SetCoords\(({_NAME}), ({_NUM}), ({_NUM})\)", command):
+            self.point(m[1])
+            self.points[m[1]] = (float(m[2]), float(m[3]))
+        elif m := re.fullmatch(rf'Rename\(({_NAME}), "({_NAME})"\)', command):
+            if m[1] in self.points:
+                self.points[m[2]] = self.points.pop(m[1])
+            else:
+                self.shapes[m[2]] = self.shapes.pop(m[1])
         elif m := re.fullmatch(
+            rf"({_NAME}) = (Midpoint|Intersect|Reflect|Translate|Rotate|Polygon"
+            rf"|PerpendicularLine|PerpendicularBisector|AngleBisector|Distance|Area"
+            rf"|Perimeter|If)\((.*)\)",
+            command,
+        ):
+            self._construct(m[1], m[2], m[3])
+        else:
+            self._two_point_object(command)
+
+    def _construct(self, label: str, command: str, inside: str) -> None:
+        """A whitelisted command: record what it creates, with coordinates when easy."""
+        refs = tuple(dict.fromkeys(n for n in re.findall(_NAME, inside) if n in self.names()))
+        args = [a.strip() for a in inside.split(",")]
+        kinds = {"Polygon": "polygon", "Midpoint": "point", "Intersect": "point"}
+        if command in ("Reflect", "Translate", "Rotate"):
+            first = args[0]
+            kind = "point" if first in self.points else self.shapes[first].kind
+        elif command in kinds:
+            kind = kinds[command]
+        elif command.endswith(("Line", "Bisector")):
+            kind = "line"
+        else:
+            kind = "number"
+
+        position = self._position(command, args) if kind == "point" else None
+        if position is not None:
+            self.points[label] = position
+        else:
+            self.shapes[label] = Shape(kind, refs)
+        self._count(kind)
+        if command == "Polygon":
+            for a, b in zip(args, [*args[1:], args[0]], strict=True):
+                self.shapes[self._auto_name()] = Shape("segment", (a, b))
+
+    def _position(self, command: str, args: list[str]) -> Point | None:
+        names = [n for n in re.findall(_NAME, ", ".join(args)) if n != "Vector"]
+        if not all(n in self.points for n in names):
+            return None  # built from a line or circle: not computed here
+        p = [self.points[n] for n in names]
+        if command == "Midpoint":
+            return ((p[0][0] + p[1][0]) / 2, (p[0][1] + p[1][1]) / 2)
+        if command == "Reflect":
+            return (2 * p[1][0] - p[0][0], 2 * p[1][1] - p[0][1])
+        if command == "Translate":
+            return (p[0][0] + p[2][0] - p[1][0], p[0][1] + p[2][1] - p[1][1])
+        if command == "Rotate":
+            angle = math.radians(float(args[1].rstrip("°")))
+            (px, py), (cx, cy) = p
+            dx, dy = px - cx, py - cy
+            return (
+                cx + dx * math.cos(angle) - dy * math.sin(angle),
+                cy + dx * math.sin(angle) + dy * math.cos(angle),
+            )
+        return None
+
+    def _two_point_object(self, command: str) -> None:
+        name, num = _NAME, _NUM
+        if m := re.fullmatch(
             rf"(?:({name}) = )?(Segment|Line|Ray|Circle)\(({name}), ({name}|{num})\)", command
         ):
             kind = m[2].lower()
@@ -198,8 +267,13 @@ class Figure:
         self.created[kind] = self.created.get(kind, 0) + 1
 
     def _auto_name(self) -> str:
-        self._auto += 1
-        return f"_obj{self._auto}"
+        """Name an unnamed object like GeoGebra does: f, g, h... then f_1, g_1..."""
+        while True:
+            letter, round_ = "fghijklmnpqrstuvwz"[self._auto % 18], self._auto // 18
+            self._auto += 1
+            name = letter if round_ == 0 else f"{letter}_{round_}"
+            if name not in self.names():
+                return name
 
     # Queries used by the checks.
 
@@ -218,7 +292,12 @@ class Figure:
         a, b = (self.point(n) for n in split_names(pair))
         return math.dist(a, b)
 
+    def has_point(self, name: str) -> bool:
+        return name in self.points or getattr(self.shapes.get(name), "kind", None) == "point"
+
     def point(self, name: str) -> Point:
+        if name in self.shapes and self.shapes[name].kind == "point":
+            raise KeyError(f"point {name} is constructed: its position is not computed here")
         if name not in self.points:
             raise KeyError(f"point {name} is missing")
         return self.points[name]
@@ -261,12 +340,16 @@ def _check_figure(expect: Expect, before: Figure, after: Figure) -> list[str]:
             if not (close(px, x) and close(py, y)):
                 failures.append(f"{name} at ({px:g}, {py:g}), expected ({x:g}, {y:g})")
     else:
-        failures += [f"point {n} is missing" for n in expect.points if n not in after.points]
+        failures += [f"point {n} is missing" for n in expect.points if not after.has_point(n)]
     failures += [f"{n} should not exist" for n in expect.absent if n in after.names()]
 
     for kind, pairs in (("segment", expect.segments), ("line", expect.lines)):
         failures += [f"{kind} {p} is missing" for p in pairs if not after.has(kind, p)]
     failures += [f"ray [{p}) is missing" for p in expect.rays if not after.has("ray", p)]
+
+    for pattern in expect.commands:
+        if not any(re.fullmatch(pattern, command) for command in after.commands):
+            failures.append(f"no command matching {pattern}")
 
     for spec in expect.circles:
         if not any(_circle_matches(after, shape, spec) for shape in after.shapes.values()):
@@ -362,6 +445,8 @@ def main() -> None:
     parser.add_argument("--model", help="LLM model (default: the app's LLM_MODEL)")
     parser.add_argument("-v", "--verbose", action="store_true", help="show INFO logs")
     args = parser.parse_args()
+    # Print each result as it comes, so that a stopped run (rate limits) keeps them.
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING,

@@ -32,6 +32,74 @@ _MESSAGES: dict[str, dict[Language, str]] = {
         "fr": "Cercle de centre {center} passant par {through} tracé.",
         "en": "Circle with center {center} through {through} drawn.",
     },
+    "midpoint_created": {
+        "fr": "Milieu {name} de [{a0}{a1}] placé.",
+        "en": "Midpoint {name} of {a0}{a1} placed.",
+    },
+    "bisector_created": {
+        "fr": "Médiatrice {name} de [{a0}{a1}] tracée.",
+        "en": "Perpendicular bisector {name} of {a0}{a1} drawn.",
+    },
+    "angle_bisector_created": {
+        "fr": "Bissectrice {name} de l'angle {a0}{a1}{a2} tracée.",
+        "en": "Bisector {name} of angle {a0}{a1}{a2} drawn.",
+    },
+    "perpendicular_created": {
+        "fr": "Perpendiculaire {name} à {a1} passant par {a0} tracée.",
+        "en": "Perpendicular {name} to {a1} through {a0} drawn.",
+    },
+    "parallel_created": {
+        "fr": "Parallèle {name} à {a1} passant par {a0} tracée.",
+        "en": "Parallel {name} to {a1} through {a0} drawn.",
+    },
+    "polygon_created": {
+        "fr": "Polygone {name} tracé.",
+        "en": "Polygon {name} drawn.",
+    },
+    "intersection_created": {
+        "fr": "Point {name}, intersection de {a0} et {a1}, placé.",
+        "en": "Point {name}, intersection of {a0} and {a1}, placed.",
+    },
+    "central_symmetry_created": {
+        "fr": "{name}, symétrique de {a0} par rapport au point {a1}, construit.",
+        "en": "{name}, image of {a0} by the point reflection in {a1}, drawn.",
+    },
+    "axial_symmetry_created": {
+        "fr": "{name}, symétrique de {a0} par rapport à la droite {a1}, construit.",
+        "en": "{name}, reflection of {a0} in the line {a1}, drawn.",
+    },
+    "translation_created": {
+        "fr": "{name}, image de {a0} par la translation qui transforme {a1} en {a2}, construit.",
+        "en": "{name}, image of {a0} by the translation taking {a1} to {a2}, drawn.",
+    },
+    "rotation_created": {
+        "fr": "{name}, image de {a0} par la rotation de centre {a2} et d'angle {a1}°, construit.",
+        "en": "{name}, image of {a0} by the rotation with center {a2} and angle {a1}°, drawn.",
+    },
+    "distance_measured": {
+        "fr": "La longueur {a0}{a1} est {value}.",
+        "en": "The length {a0}{a1} is {value}.",
+    },
+    "angle_measured": {
+        "fr": "L'angle {a0}{a1}{a2} mesure {value}°.",
+        "en": "Angle {a0}{a1}{a2} measures {value}°.",
+    },
+    "area_measured": {
+        "fr": "L'aire de {all} est {value}.",
+        "en": "The area of {all} is {value}.",
+    },
+    "perimeter_measured": {
+        "fr": "Le périmètre de {all} est {value}.",
+        "en": "The perimeter of {all} is {value}.",
+    },
+    "renamed": {
+        "fr": "{name} renommé en {new_name}.",
+        "en": "{name} renamed {new_name}.",
+    },
+    "point_moved": {
+        "fr": "Point {name} déplacé en ({x} ; {y}).",
+        "en": "Point {name} moved to ({x}, {y}).",
+    },
     "object_deleted": {
         "fr": "{name} supprimé.",
         "en": "{name} deleted.",
@@ -63,6 +131,14 @@ _MESSAGES: dict[str, dict[Language, str]] = {
     "name_taken": {
         "fr": "Le nom {name} est déjà utilisé.",
         "en": "The name {name} is already used.",
+    },
+    "point_not_free": {
+        "fr": "{name} dépend d'autres objets : on ne peut pas le déplacer.",
+        "en": "{name} depends on other objects, so it cannot be moved.",
+    },
+    "wrong_arguments": {
+        "fr": "Cette construction ne s'applique pas à {args}.",
+        "en": "This construction does not apply to {args}.",
     },
     "not_understood": {
         "fr": "Je n'ai pas compris. Pouvez-vous reformuler ?",

@@ -83,7 +83,11 @@ export class GeoGebraBoard {
     for (const step of steps) {
       if (step.op === "eval") {
         const before = new Set(this.api.getAllObjectNames());
-        if (!this.api.evalCommand(step.command)) {
+        // GeoGebra would silently redefine an existing object of the same name.
+        const clash = step.label && this.api.exists(step.label);
+        // Scripting commands (Rename, SetCoords) report failure even when they work.
+        const ok = !clash && (this.api.evalCommand(step.command) || step.script);
+        if (!ok) {
           created.reverse().forEach((name) => this.api.deleteObject(name));
           return { ok: false, failedCommand: step.command };
         }
@@ -99,5 +103,17 @@ export class GeoGebraBoard {
     }
     if (dirty) this.api.setUndoPoint();
     return { ok: true };
+  }
+
+  /** Replace each {{name}} in `message` with the value GeoGebra computed for `name`. */
+  fillValues(message, language) {
+    const format = new Intl.NumberFormat(language, { maximumFractionDigits: 2 });
+    return message.replace(/\{\{([^{}]+)\}\}/g, (placeholder, name) => {
+      if (!this.api.exists(name)) return placeholder;
+      let value = this.api.getValue(name);
+      // Angles are stored in radians; the message says degrees.
+      if (this.api.getObjectType(name) === "angle") value = (value * 180) / Math.PI;
+      return format.format(value);
+    });
   }
 }

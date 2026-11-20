@@ -109,7 +109,9 @@ async function runCommand(send) {
     const result = await send();
     if (result.transcript) addHistory(`${t(language, "youSaid")} : ${result.transcript}`, "said");
     const outcome = result.steps.length ? board.execute(result.steps) : { ok: true };
-    const reply = outcome.ok ? result.message : t(language, "executionFailed");
+    const reply = outcome.ok
+      ? board.fillValues(result.message, language)
+      : t(language, "executionFailed");
     if (!outcome.ok) console.warn("GeoGebra rejected command:", outcome.failedCommand);
     report(reply, !outcome.ok || result.status === "rejected");
     if (result.transcript) remember(result.transcript, reply);
